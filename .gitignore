@@ -1,0 +1,18 @@
+# Dataset (hosted on Google Drive, see README) — do not commit images
+train/
+valid/
+test/
+*.jpg
+*.jpeg
+*.png
+!home_page.png.png
+
+# Trained model (large binary, not in the repo)
+*.keras
+*.h5
+*.pkl
+
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+venv/
