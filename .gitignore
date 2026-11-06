@@ -2,17 +2,22 @@
 train/
 valid/
 test/
+data/
 *.jpg
 *.jpeg
 *.png
 !home_page.png.png
+!results/figures/*.png
 
-# Trained model (large binary, not in the repo)
+# Trained models (large binaries, not in the repo)
 *.keras
 *.h5
 *.pkl
 
+# Python
 __pycache__/
+*.pyc
 .ipynb_checkpoints/
 .venv/
 venv/
+requirements-lock.txt

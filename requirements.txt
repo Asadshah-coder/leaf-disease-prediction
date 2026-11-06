@@ -1,5 +1,19 @@
-streamlit
-tensorflow
-numpy
-pandas
-Pillow
+# Leaf Disease Prediction — dependencies (Python 3.12)
+#
+# Versions use lower bounds (>=), not exact pins: the exact TensorFlow
+# release available on a given machine/Colab changes over time, and an
+# exact pin that cannot be verified here would be worse than a bound.
+# TensorFlow 2.16+ supports Python 3.12; install the latest 2.x release
+# in that range. After installing, record the exact versions with:
+#     pip freeze > requirements-lock.txt
+#
+# Install with:  pip install -r requirements.txt
+# Run the app:   streamlit run main.py
+
+streamlit>=1.32
+tensorflow>=2.16
+numpy>=1.26
+pandas>=2.0
+Pillow>=10.0
+matplotlib>=3.8
+scikit-learn>=1.4
