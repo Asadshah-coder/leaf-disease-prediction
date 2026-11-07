@@ -90,23 +90,29 @@ def make_gradcam_heatmap(model, image_array, class_index):
     import numpy as np
     import tensorflow as tf
 
-    # A model loaded from disk may not expose ``.output`` / layer
-    # ``.output`` until it has been called once (Keras 3 raises
-    # "The layer ... has never been called" otherwise). Run one dummy
-    # forward pass first so the graph — and every layer's outputs —
-    # is defined before building the gradient model.
-    if not getattr(model, "built", False):
-        model.build((None, IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
-    _ = model(tf.zeros((1, IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
-                       dtype=tf.float32), training=False)
+    # Keras 3 gotcha: a Sequential model loaded from disk does NOT
+    # expose ``.output`` / layer ``.output`` — eager calls (including
+    # ``model.predict`` and a dummy forward pass) do not define them,
+    # so accessing them raises "The layer ... has never been called".
+    # Fix: replay the model's layers over a symbolic input to build a
+    # Functional model, whose outputs ARE defined, and take the
+    # gradients through that model instead. Layer objects are shared,
+    # so the weights are the trained ones.
+    inputs = tf.keras.Input(shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
+    x = inputs
+    for layer in model.layers:
+        x = layer(x)
+    functional = tf.keras.Model(inputs=inputs, outputs=x)
 
-    conv_name = last_conv_layer(model)
+    conv_name = last_conv_layer(functional)
     grad_model = tf.keras.models.Model(
-        inputs=model.inputs,
-        outputs=[model.get_layer(conv_name).output, model.output],
+        inputs=functional.inputs,
+        outputs=[functional.get_layer(conv_name).output,
+                 functional.output],
     )
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(image_array)
+        conv_outputs, predictions = grad_model(image_array,
+                                               training=False)
         loss = predictions[:, class_index]
     grads = tape.gradient(loss, conv_outputs)
     # Global-average-pool the gradients -> one weight per feature map.
