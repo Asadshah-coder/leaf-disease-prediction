@@ -18,9 +18,9 @@ through a Streamlit web app. The original 10-epoch run recorded
 Results). The model was **retrained on 7 Nov 2026** on Google Colab
 (T4 GPU) with the reproducible script in this repo (data augmentation
 on, 10 epochs, 70,295 train / 17,572 validation images): final
-**94.86% training accuracy, 93.08% validation accuracy, 0.9308
+**95.20% training accuracy, 94.21% validation accuracy, 0.9417
 macro-average F1** — the honest, reproducible numbers, saved as
-`trained_plant_disease_model.keras` (87 MB). The improved version adds a reproducible training script,
+`trained_plant_disease_model.keras` (86 MB). The improved version adds a reproducible training script,
 proper per-class evaluation, Grad-CAM explainability, and a
 transfer-learning comparison (custom CNN vs. MobileNetV2 and
 EfficientNetB0) so the work can be judged as research, not only as a
@@ -91,27 +91,32 @@ comparable with the original run:
 
 ## Results
 
-### Retraining run — 7 Nov 2026 (Google Colab, T4 GPU)
+### Retraining run #2 — 7 Nov 2026 (Google Colab, T4 GPU)
 
-The model was retrained with the reproducible script in this repo
+The model was retrained a second time the same day (the first
+retrain's model file was lost when its Colab runtime disconnected
+before the file was saved). Run #1 reached 94.86% training / 93.08%
+validation accuracy; its files are preserved as
+`results/*_retrain1.*`. Run #2 used the same reproducible script
 (`python src/train.py --data-dir data --epochs 10 --batch-size 32`),
 with data augmentation (random flip / rotation / zoom) on the training
 set only. Full per-epoch history in `results/training_history.json`,
 per-class metrics in `results/evaluation.json` and
-`results/classification_report.txt` (17,572 validation images).
+`results/classification_report.txt` (17,572 validation images),
+confusion matrix in `results/confusion_matrix.png`.
 
 | Metric | Epoch 1 | Final (epoch 10) |
 |---|---|---|
-| Training accuracy | 36.77% | **94.86%** |
-| Validation accuracy | 66.29% | **93.08%** |
-| Training loss | 2.193 | 0.153 |
-| Validation loss | 1.095 | 0.203 |
+| Training accuracy | 40.11% | **95.20%** |
+| Validation accuracy | 65.47% | **94.21%** |
+| Training loss | 2.049 | 0.146 |
+| Validation loss | 1.109 | 0.167 |
 
-Validation accuracy peaked at **94.27% (epoch 8)**; macro-average F1
-**0.9308**, weighted-average F1 **0.9307**. The trained model
-(`trained_plant_disease_model.keras`, 87 MB) is kept off GitHub (see
-`.gitignore`) — download it from the Drive link in Reproducibility or
-retrain with the Colab notebook.
+Validation accuracy peaked at **94.32% (epoch 9)**; macro-average F1
+**0.9417**, weighted-average F1 **0.9416**. The trained model
+(`trained_plant_disease_model.keras`, 86 MB) is kept off GitHub (see
+`.gitignore`) — retrain with the Colab notebook to reproduce it; it
+is not currently hosted on Drive.
 
 ![Training vs. validation accuracy](results/figures/accuracy.png)
 ![Training vs. validation loss](results/figures/loss.png)
@@ -190,9 +195,8 @@ file is present, the app explains how to get one instead of crashing.
    was retrained on 7 Nov 2026 (see Results) — place
    `trained_plant_disease_model.keras` next to `main.py` to run
    predictions; until then the app explains how to get one instead of
-   crashing. The 87 MB model file is not stored in this repo
-   (`.gitignore`); get it from Drive or retrain with the Colab
-   notebook.
+   crashing. The 86 MB model file is not stored in this repo
+   (`.gitignore`); retrain with the Colab notebook to reproduce it.
 2. **Test set is only 33 images.** The original zip's `test/` folder
    is a small sample set, not a proper held-out test set. Test-set
    numbers must come from a proper split in the retraining run; the
@@ -202,17 +206,23 @@ file is present, the app explains how to get one instead of crashing.
 4. **Per-class metrics recorded on retraining.** `src/evaluate.py`
    produces them; `results/evaluation.json` and
    `results/classification_report.txt` now hold the 7 Nov 2026
-   retraining run (macro-average F1 0.9308, 17,572 validation images).
+   retraining run (macro-average F1 0.9417, 17,572 validation images).
    Note: two dataset folder names differ slightly from the names in
    `src/model.py` (`Tomato___Spider_mites Two-spotted_spider_mite`
    uses a space; one Corn folder name also differs) — `src/train.py`
    is unaffected (TensorFlow sorts folders, indices align) and
    `src/evaluate.py` now tolerates such spelling variants.
 5. **Single train/validation split, no cross-validation.** Noted as future work.
+6. **Grad-CAM does not yet run on the saved model.** `src/gradcam.py`
+   fails with `AttributeError: The layer sequential_1 has never been
+   called and thus has no defined output` on Keras 3 when the model is
+   loaded from disk; the dummy-forward-pass fix did not resolve it, and
+   no `results/gradcam.png` exists yet. Fixing it is the next step.
 
 ## Future work
 
-- Retrain on Colab and publish the verified test-set classification report.
+- Fix Grad-CAM for Keras 3 models loaded from disk and publish `results/gradcam.png`.
+- Publish the verified test-set classification report.
 - Complete the MobileNetV2 / EfficientNetB0 comparison and report it in `results/model_comparison.csv`.
 - Add cross-validation and a proper held-out test split.
 - Try a larger input resolution (e.g. 224×224) for the transfer-learning models.
