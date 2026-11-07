@@ -115,8 +115,9 @@ confusion matrix in `results/confusion_matrix.png`.
 Validation accuracy peaked at **94.32% (epoch 9)**; macro-average F1
 **0.9417**, weighted-average F1 **0.9416**. The trained model
 (`trained_plant_disease_model.keras`, 86 MB) is kept off GitHub (see
-`.gitignore`) — retrain with the Colab notebook to reproduce it; it
-is not currently hosted on Drive.
+`.gitignore`) — it is hosted on Google Drive (public, anyone with the
+link) in the `FYP-Leaf-Disease` folder, and `main.py` downloads it
+automatically on first run if no local model file exists.
 
 ![Training vs. validation accuracy](results/figures/accuracy.png)
 ![Training vs. validation loss](results/figures/loss.png)
@@ -196,7 +197,8 @@ file is present, the app explains how to get one instead of crashing.
    `trained_plant_disease_model.keras` next to `main.py` to run
    predictions; until then the app explains how to get one instead of
    crashing. The 86 MB model file is not stored in this repo
-   (`.gitignore`); retrain with the Colab notebook to reproduce it.
+   (`.gitignore`); the app downloads it from Google Drive on first
+   run, or you can retrain with the Colab notebook to reproduce it.
 2. **Test set is only 33 images.** The original zip's `test/` folder
    is a small sample set, not a proper held-out test set. Test-set
    numbers must come from a proper split in the retraining run; the

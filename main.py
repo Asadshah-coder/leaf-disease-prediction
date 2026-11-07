@@ -38,6 +38,12 @@ MODEL_CANDIDATES = [
     "trained_model.keras",
 ]
 
+# Google Drive file ID of the trained model (public "anyone with the
+# link" download). The Streamlit Cloud demo has no model file in the
+# repo (the 86 MB file is too large for GitHub), so the app downloads
+# it from Drive on first run — only when no local model file exists.
+MODEL_DRIVE_FILE_ID = "1ufCFp8jhSFG6MMkcgF3XJsxm98y_7AjK"
+
 # Class names, exactly as in the original project (order matters: index i of
 # the model's softmax output is CLASS_NAMES[i]). Do not reorder.
 CLASS_NAMES = [
@@ -85,13 +91,38 @@ def find_model_file() -> Path | None:
     return None
 
 
+def ensure_model_file() -> Path | None:
+    """Return a local model file, downloading it from Drive if needed.
+
+    Prefers a file already next to ``main.py``. Otherwise downloads
+    the trained model from Google Drive (first run on Streamlit Cloud
+    only). Returns None when no model can be found or downloaded.
+    """
+    path = find_model_file()
+    if path is not None:
+        return path
+    if not MODEL_DRIVE_FILE_ID:
+        return None
+    try:
+        import gdown
+    except ImportError:
+        return None
+    dest = Path(__file__).resolve().parent / MODEL_CANDIDATES[0]
+    url = f"https://drive.google.com/uc?id={MODEL_DRIVE_FILE_ID}"
+    with st.spinner("Downloading the trained model (86 MB) — first run only..."):
+        gdown.download(url, str(dest), quiet=True)
+    if dest.is_file() and dest.stat().st_size > 0:
+        return dest
+    return None
+
+
 @st.cache_resource(show_spinner="Loading the trained model...")
 def load_model():
     """Load the trained Keras model once and cache it for the session.
 
     Returns (model, model_path) or (None, None) when no model file exists.
     """
-    path = find_model_file()
+    path = ensure_model_file()
     if path is None:
         return None, None
     model = tf.keras.models.load_model(str(path))
