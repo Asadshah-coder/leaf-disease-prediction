@@ -13,6 +13,7 @@ data/
 *.keras
 *.h5
 *.pkl
+*.npy
 
 # Python
 __pycache__/
