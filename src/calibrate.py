@@ -94,6 +94,12 @@ def build_logit_model(model, num_classes=len(CLASS_NAMES)):
     and applying the same Dense weights with a *linear* activation
     gives the exact logits. A self-check in ``main()`` verifies that
     ``softmax(logits)`` matches the original model's output.
+
+    NOTE (Keras 3, TF 2.21): a model loaded from disk has no defined
+    ``model.input`` — accessing it raises AttributeError, and an eager
+    dummy forward pass does not create one. The input tensor is
+    therefore taken from the first layer (``model.layers[0].input``),
+    which belongs to the same graph as the pre-softmax features.
     """
     import tensorflow as tf
 
@@ -102,7 +108,7 @@ def build_logit_model(model, num_classes=len(CLASS_NAMES)):
     logits = tf.keras.layers.Dense(
         num_classes, activation=None, name="logits"
     )(features)
-    logit_model = tf.keras.Model(model.input, logits)
+    logit_model = tf.keras.Model(model.layers[0].input, logits)
     logit_model.layers[-1].set_weights([weights, bias])
     return logit_model
 

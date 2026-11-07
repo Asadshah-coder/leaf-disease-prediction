@@ -322,6 +322,18 @@ confidence (Phase 2).
 
 ### Phase 2 — Calibration & OOD rejection (no retraining)
 
+**Status (7 Nov 2026): COMPLETE + WIRED IN (experiment E5).**
+Temperature T = **1.0616**, ECE 0.0077 → 0.0042, accuracy unchanged
+(94.21%). The model was already well calibrated — the honest finding
+is that calibration was never the main problem. Energy beat
+max-softmax as the OOD signal (AUC 0.8902 vs 0.8097); threshold
+6.0440 at 95% TPR flags 4.96% of real leaves and catches 55.1% of
+non-leaf images — a second layer only, the gate (99.87%) remains the
+primary defence. Old 80% rule: flagged 9.95% as uncertain, 61% of
+those were actually correct. Full log: `docs/experiments/E5.md`.
+Wired into `main.py` (calibrated top-3 + energy uncertainty rule,
+80% rule removed) — live verification pending.
+
 - **2a. Temperature scaling:** fit a single temperature T on the
   validation logits; report Expected Calibration Error (ECE) and a
   reliability diagram before/after. Ship the fitted T in the app.

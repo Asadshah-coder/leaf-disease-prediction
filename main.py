@@ -86,8 +86,25 @@ CLASS_NAMES = [
 
 IMAGE_SIZE = (128, 128)
 
-# A prediction below this confidence is shown as uncertain instead of
-# being hidden (kept from the original project, which hid such rows).
+# Calibration (experiment E5, 7 Nov 2026, n=17,572 validation images):
+# temperature scaling fitted on the validation logits. ECE 0.0077 ->
+# 0.0042. Accuracy is unchanged (94.21%) — temperature only rescales
+# confidence, it never changes the predicted class.
+TEMPERATURE = 1.0616
+
+# OOD rejection (experiment E5): the energy signal, logsumexp of the
+# raw logits, separates validation leaves from non-leaf photos (ROC AUC
+# 0.8902, better than max-softmax at 0.8097). A result is treated as
+# uncertain when logsumexp(logits) is below this threshold — the highest
+# threshold that still keeps 95% of real leaves above it. At this
+# threshold 4.96% of real leaves are flagged uncertain, and 55.1% of
+# non-leaf images are caught. The leaf gate remains the primary defence:
+# it rejects 99.87% of non-leaf images before the model ever runs.
+OOD_LOGIT_THRESHOLD = 6.0440
+
+# Fallback only: used when the logit model cannot be built (then the
+# energy check is unavailable and uncertainty falls back to calibrated
+# confidence below 80%).
 CONFIDENCE_THRESHOLD = 0.80
 
 HISTORY_LIMIT = 50
@@ -157,21 +174,67 @@ def load_model():
     return model, path
 
 
-def predict_top3(model, image_file):
-    """Predict the top 3 disease classes of one uploaded leaf image.
+@st.cache_resource(show_spinner=False)
+def load_logit_model(_model):
+    """Build a model that outputs pre-softmax logits (for calibration
+    and the energy OOD score). Returns None when it cannot be built —
+    the app then falls back to uncalibrated probabilities.
 
-    Returns a list of (predicted_class, confidence) sorted by
-    confidence, highest first. Pixels are normalised to [0, 1] first —
-    the model was trained on normalised inputs.
+    The saved model's last layer is Dense(38, softmax); the logits are
+    recovered by applying its weights with a linear activation to the
+    previous layer's output. Keras 3: a loaded model has no defined
+    ``model.input``, so the input tensor comes from the first layer.
+    """
+    try:
+        features = _model.layers[-2].output
+        weights, bias = _model.layers[-1].get_weights()
+        logits = tf.keras.layers.Dense(
+            len(CLASS_NAMES), activation=None
+        )(features)
+        logit_model = tf.keras.Model(_model.layers[0].input, logits)
+        logit_model.layers[-1].set_weights([weights, bias])
+        return logit_model
+    except Exception:
+        return None
+
+
+def softmax_np(logits):
+    """Numerically stable softmax (numpy)."""
+    shifted = logits - np.max(logits, axis=-1, keepdims=True)
+    exp = np.exp(shifted)
+    return exp / np.sum(exp, axis=-1, keepdims=True)
+
+
+def predict_top3(model, image_file, logit_model=None):
+    """Predict the top 3 disease classes with calibrated confidences.
+
+    Returns (top3, logit_sum): top3 is a list of (class, calibrated
+    confidence) sorted highest first; logit_sum is logsumexp of the
+    raw logits (the OOD energy signal), or None when the logit model
+    is unavailable. Confidences are temperature-scaled
+    (softmax(logits / TEMPERATURE)); accuracy is unaffected.
     """
     image = tf.keras.preprocessing.image.load_img(
         image_file, target_size=IMAGE_SIZE
     )
     input_arr = tf.keras.preprocessing.image.img_to_array(image) / 255.0
     input_arr = np.array([input_arr])  # single image -> batch of one
-    predictions = model.predict(input_arr, verbose=0)[0]
-    top_idx = np.argsort(predictions)[::-1][:3]
-    return [(CLASS_NAMES[i], float(predictions[i])) for i in top_idx]
+    if logit_model is not None:
+        logits = logit_model.predict(input_arr, verbose=0)[0]
+        top = np.max(logits)
+        logit_sum = float(top + np.log(np.sum(np.exp(logits - top))))
+        probs = softmax_np(logits / TEMPERATURE)
+    else:
+        # Fallback: calibrate from the raw softmax output. This is
+        # mathematically identical for the probabilities
+        # (softmax(log(p)/T) == softmax(logits/T)), but no energy
+        # score is available.
+        raw = model.predict(input_arr, verbose=0)[0]
+        logit_sum = None
+        logp = np.log(np.clip(raw, 1e-12, 1.0))
+        probs = softmax_np(logp / TEMPERATURE)
+    top_idx = np.argsort(probs)[::-1][:3]
+    return [(CLASS_NAMES[i], float(probs[i])) for i in top_idx], logit_sum
 
 
 def show_missing_model_message() -> None:
@@ -333,6 +396,10 @@ def page_diagnose(model) -> None:
         show_missing_model_message()
         return
 
+    # Logit model for calibrated confidences + the energy OOD score
+    # (built once per session; None on failure, with a fallback).
+    logit_model = load_logit_model(model)
+
     st.markdown("### 1. Add leaf photos")
     uploaded = st.file_uploader(
         "Choose up to 3 images",
@@ -433,7 +500,7 @@ def page_diagnose(model) -> None:
                 continue
             for reason in validation["reasons"]:
                 st.warning(f"⚠️ {filename}: {reason}")
-            top3 = predict_top3(model, image)
+            top3, logit_sum = predict_top3(model, image, logit_model)
             top_class, top_conf = top3[0]
             info = DISEASE_INFO.get(top_class, {})
             record = {
@@ -455,7 +522,14 @@ def page_diagnose(model) -> None:
                 st.image(image, caption=record["filename"],
                          use_container_width=True)
             with res_col:
-                low = top_conf < CONFIDENCE_THRESHOLD
+                # Uncertain when the energy OOD signal says this image
+                # does not look like the leaves the model was trained on
+                # (experiment E5 threshold); without the logit model,
+                # fall back to calibrated confidence below 80%.
+                if logit_sum is not None:
+                    low = logit_sum < OOD_LOGIT_THRESHOLD
+                else:
+                    low = top_conf < CONFIDENCE_THRESHOLD
                 card_class = "result-card low" if low else "result-card"
                 status = ("⚠️ Low confidence — treat as uncertain"
                           if low else "✅ Confident prediction")
@@ -477,8 +551,9 @@ def page_diagnose(model) -> None:
                 )
                 if low:
                     st.warning(
-                        "The model's confidence is below 80%, so this result "
-                        "is uncertain. Try a clearer, well-lit photo of a "
+                        "The model is uncertain about this image, so this "
+                        "result should not be treated as a confirmed "
+                        "diagnosis. Try a clearer, well-lit photo of a "
                         "single leaf, or check the other predictions above."
                     )
                 if validation["gate_active"] and validation["gate_score"] is not None:
@@ -697,8 +772,10 @@ def page_about() -> None:
         - **Validation accuracy:** 94.21% (peak 94.32% at epoch 9)
         - **Macro F1:** 0.9417 on 17,572 validation images
         - **Input:** 128×128 RGB images, pixels normalised to [0, 1]
-        - **Prediction rule:** the top prediction is shown with its
-          confidence; results below 80% confidence are marked uncertain
+        - **Prediction rule:** confidences are temperature-calibrated
+          (T = 1.06, experiment E5); a result is marked uncertain when
+          the energy score says the image does not look like the leaves
+          the model was trained on
         """
     )
     st.markdown("### Links")
