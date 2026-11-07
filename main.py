@@ -43,6 +43,7 @@ except ImportError:  # weather is optional; the app works without it
     requests = None
 
 from disease_info import DISEASE_INFO, SEASONAL_ACTIVE, SEASONAL_NOTES
+from input_validation import load_gate_model, validate_image
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -405,14 +406,38 @@ def page_diagnose(model) -> None:
         st.info("Upload a leaf photo above to start a diagnosis.")
         return
 
+    # Input validation (Phase 1): quality gates always run; the learned
+    # leaf gate runs too once its weights exist (experiment E4).
+    gate_model = load_gate_model()
+    if gate_model is None:
+        st.caption("🔍 Leaf check: quality checks only for now — the "
+                   "leaf-vs-non-leaf classifier is training (experiment E4).")
+
     if st.button("🔍 Diagnose", type="primary"):
         for image in images:
+            filename = getattr(image, "name", "camera photo")
+            # Validate BEFORE the disease model ever sees the image:
+            # rejected uploads get an explanation, never a diagnosis,
+            # and are never saved to history.
+            validation = validate_image(image.getvalue(), gate_model)
+            if validation["decision"] == "reject":
+                st.error(f"❌ {filename} — not diagnosed.")
+                for reason in validation["reasons"]:
+                    st.markdown(f"- {reason}")
+                if validation["gate_score"] is not None:
+                    st.caption(
+                        "Leaf probability: "
+                        f"{validation['gate_score'] * 100:.1f}%"
+                    )
+                continue
+            for reason in validation["reasons"]:
+                st.warning(f"⚠️ {filename}: {reason}")
             top3 = predict_top3(model, image)
             top_class, top_conf = top3[0]
             info = DISEASE_INFO.get(top_class, {})
             record = {
                 "time": datetime.now(),
-                "filename": getattr(image, "name", "camera photo"),
+                "filename": filename,
                 "image": image.getvalue(),
                 "prediction": top_class,
                 "confidence": top_conf,
@@ -453,6 +478,11 @@ def page_diagnose(model) -> None:
                         "The model's confidence is below 80%, so this result "
                         "is uncertain. Try a clearer, well-lit photo of a "
                         "single leaf, or check the other predictions above."
+                    )
+                if validation["gate_active"] and validation["gate_score"] is not None:
+                    st.caption(
+                        "🍃 Leaf check: "
+                        f"{validation['gate_score'] * 100:.1f}% leaf"
                     )
                 if info:
                     with st.expander(f"About {pretty_class(top_class)}"):
