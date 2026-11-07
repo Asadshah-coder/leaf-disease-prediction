@@ -90,30 +90,27 @@ def make_gradcam_heatmap(model, image_array, class_index):
     import numpy as np
     import tensorflow as tf
 
-    # Keras 3 gotcha: a Sequential model loaded from disk does NOT
-    # expose ``.output`` / layer ``.output`` — eager calls (including
-    # ``model.predict`` and a dummy forward pass) do not define them,
-    # so accessing them raises "The layer ... has never been called".
-    # Fix: replay the model's layers over a symbolic input to build a
-    # Functional model, whose outputs ARE defined, and take the
-    # gradients through that model instead. Layer objects are shared,
-    # so the weights are the trained ones.
-    inputs = tf.keras.Input(shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
-    x = inputs
-    for layer in model.layers:
-        x = layer(x)
-    functional = tf.keras.Model(inputs=inputs, outputs=x)
-
-    conv_name = last_conv_layer(functional)
-    grad_model = tf.keras.models.Model(
-        inputs=functional.inputs,
-        outputs=[functional.get_layer(conv_name).output,
-                 functional.output],
-    )
+    # Keras 3: a Sequential model loaded from disk does not expose
+    # ``.output`` / layer ``.output`` (eager calls do not define them),
+    # and rebuilding a Functional model around the shared layers breaks
+    # Functional.call() with a KeyError. So do Grad-CAM purely eagerly:
+    # run the layers one by one inside the GradientTape and capture the
+    # last convolutional layer's output as it passes through. No
+    # symbolic graph, no Model() construction — nothing that can be
+    # "never called".
+    conv_name = last_conv_layer(model)
+    image_tensor = tf.convert_to_tensor(image_array, dtype=tf.float32)
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(image_array,
-                                               training=False)
+        x = image_tensor
+        conv_outputs = None
+        for layer in model.layers:
+            x = layer(x, training=False)
+            if layer.name == conv_name:
+                conv_outputs = x
+        predictions = x
         loss = predictions[:, class_index]
+    if conv_outputs is None:
+        raise ValueError("No Conv2D layer found in the model.")
     grads = tape.gradient(loss, conv_outputs)
     # Global-average-pool the gradients -> one weight per feature map.
     weights = tf.reduce_mean(grads, axis=(0, 1, 2))
