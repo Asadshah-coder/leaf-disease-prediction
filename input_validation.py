@@ -50,16 +50,15 @@ BLUR_REJECT = 2.0    # below this: reject as extremely blurry
 BLUR_WARN = 150.0    # below this: warn that the photo is blurry
 
 # Gate (leaf) decision threshold on the model's leaf probability.
-# Default 0.5; the training notebook (E4) re-fits this from the ROC
-# curve to favour leaf recall (>= 99%) and the fitted value replaces
-# this constant.
-GATE_THRESHOLD = 0.5
+# Fitted in experiment E4: the HIGHEST threshold that still keeps
+# leaf recall >= 99% on the validation set (n=1520) — i.e. the
+# strictest gate that still lets real leaves through. At this value:
+# leaf recall 99.74%, non-leaf rejection 99.87%, AUC 0.9999.
+GATE_THRESHOLD = 0.8615
 
 # Google Drive file ID of the trained gate model (public "anyone with
-# the link" download, same pattern as the disease model). Empty until
-# the gate is trained (experiment E4) — the app then runs quality
-# gates only.
-GATE_DRIVE_FILE_ID = ""
+# the link" download, same pattern as the disease model).
+GATE_DRIVE_FILE_ID = "1ec13gxnx5qiXlmIUl2h10_hT_2EKxOS8"
 
 GATE_MODEL_FILENAME = "plant_gate_mobilenetv2.keras"
 GATE_IMAGE_SIZE = (128, 128)
