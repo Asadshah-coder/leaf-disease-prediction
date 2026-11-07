@@ -102,6 +102,14 @@ TEMPERATURE = 1.0616
 # it rejects 99.87% of non-leaf images before the model ever runs.
 OOD_LOGIT_THRESHOLD = 6.0440
 
+# Second uncertainty condition: the top prediction is less probable
+# than all other classes combined (calibrated confidence below 50%),
+# so the model cannot decide between diseases. On the validation set
+# 2.5% of images fall below this. Together with the energy rule, at
+# most ~7.5% of real leaves are flagged uncertain (vs 9.95% under the
+# old unmeasured 80% rule, 61% of which were actually correct).
+LOW_CONFIDENCE_CUTOFF = 0.50
+
 # Fallback only: used when the logit model cannot be built (then the
 # energy check is unavailable and uncertainty falls back to calibrated
 # confidence below 80%).
@@ -524,10 +532,13 @@ def page_diagnose(model) -> None:
             with res_col:
                 # Uncertain when the energy OOD signal says this image
                 # does not look like the leaves the model was trained on
-                # (experiment E5 threshold); without the logit model,
-                # fall back to calibrated confidence below 80%.
+                # (experiment E5 threshold), OR when the top prediction
+                # is less probable than all alternatives combined
+                # (calibrated confidence below 50%). Without the logit
+                # model, fall back to calibrated confidence below 80%.
                 if logit_sum is not None:
-                    low = logit_sum < OOD_LOGIT_THRESHOLD
+                    low = (logit_sum < OOD_LOGIT_THRESHOLD
+                           or top_conf < LOW_CONFIDENCE_CUTOFF)
                 else:
                     low = top_conf < CONFIDENCE_THRESHOLD
                 card_class = "result-card low" if low else "result-card"

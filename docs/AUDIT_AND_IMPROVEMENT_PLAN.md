@@ -330,7 +330,9 @@ max-softmax as the OOD signal (AUC 0.8902 vs 0.8097); threshold
 6.0440 at 95% TPR flags 4.96% of real leaves and catches 55.1% of
 non-leaf images — a second layer only, the gate (99.87%) remains the
 primary defence. Old 80% rule: flagged 9.95% as uncertain, 61% of
-those were actually correct. Full log: `docs/experiments/E5.md`.
+those were actually correct. The shipped uncertainty rule is the
+energy threshold OR calibrated top confidence below 50% (union ≤ 7.5%
+of validation leaves). Full log: `docs/experiments/E5.md`.
 Wired into `main.py` (calibrated top-3 + energy uncertainty rule,
 80% rule removed) — live verification pending.
 
