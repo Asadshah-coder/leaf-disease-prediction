@@ -58,16 +58,35 @@ def parse_args():
 
 
 def check_class_folders(data_dir):
-    """Verify the data folder contains exactly the 38 expected classes."""
+    """Verify the data folder contains exactly the 38 expected classes.
+
+    Folder names in the wild differ slightly from the names in
+    ``CLASS_NAMES`` — e.g. the PlantVillage zip names one folder
+    ``Tomato___Spider_mites Two-spotted_spider_mite`` (with a space)
+    where the code expects an underscore. Such spelling variants are
+    tolerated as long as they sort to the same class index (verified
+    below); a genuinely missing class still stops the run, so a wrong
+    folder is never silently scored as the wrong class.
+    """
     found = sorted(p.name for p in Path(data_dir).iterdir() if p.is_dir())
-    missing = [c for c in CLASS_NAMES if c not in found]
-    extra = [c for c in found if c not in CLASS_NAMES]
-    if missing:
+
+    def norm(name):
+        return name.replace(" ", "_")
+
+    normalised = sorted(norm(f) for f in found)
+    if normalised != CLASS_NAMES:
+        missing = [c for c in CLASS_NAMES if c not in normalised]
+        extra = [c for c in normalised if c not in CLASS_NAMES]
         raise ValueError(
-            f"Missing class folders in {data_dir}: {missing}"
+            f"Class folders in {data_dir} do not match the expected "
+            f"38 classes.\nMissing: {missing}\nUnexpected: {extra}"
         )
-    if extra:
-        print(f"Warning: unexpected folders ignored: {extra}")
+    variants = {f: norm(f) for f in found if norm(f) != f}
+    if variants:
+        print("Note: folder names differ slightly from CLASS_NAMES "
+              "(same class index, tolerated):")
+        for actual, expected in variants.items():
+            print(f"  folder {actual!r} -> {expected!r}")
     return found
 
 

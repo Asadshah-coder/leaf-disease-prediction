@@ -123,6 +123,15 @@ each, as a first comparison) and writes
 4. Open the Streamlit URL, upload a leaf photo, and press Predict.
    A prediction is shown only when confidence is ≥ 80%.
 
+> **If the Drive-save cell fails:** the `drive.mount()` step needs
+> you to complete Google's authorisation prompt inside the notebook
+> output — if it reports `mount failed`, the model was NOT copied to
+> Drive and exists only in this Colab runtime, which disappears when
+> the runtime ends. In that case download
+> `trained_plant_disease_model.keras` (87 MB) and the `results/`
+> folder from the Colab `Files` panel immediately, before closing
+> the tab, and upload the model to your Drive manually.
+
 ## 7. Save your results back to GitHub
 
 After a successful run, commit the new artefacts (but **never** the

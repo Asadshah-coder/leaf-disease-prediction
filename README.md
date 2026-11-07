@@ -13,9 +13,14 @@ Plant diseases cause large crop losses, and early identification from a
 leaf photograph can help farmers act before the disease spreads. This
 project trains a convolutional neural network (CNN) to classify leaf
 images into 38 healthy/diseased categories and serves the trained model
-through a Streamlit web app. On the recorded 10-epoch training run the
-model reached **98.18% training accuracy and 96.06% validation
-accuracy**. The improved version adds a reproducible training script,
+through a Streamlit web app. The original 10-epoch run recorded
+**98.18% training accuracy and 96.06% validation accuracy** (see
+Results). The model was **retrained on 7 Nov 2026** on Google Colab
+(T4 GPU) with the reproducible script in this repo (data augmentation
+on, 10 epochs, 70,295 train / 17,572 validation images): final
+**94.86% training accuracy, 93.08% validation accuracy, 0.9308
+macro-average F1** — the honest, reproducible numbers, saved as
+`trained_plant_disease_model.keras` (87 MB). The improved version adds a reproducible training script,
 proper per-class evaluation, Grad-CAM explainability, and a
 transfer-learning comparison (custom CNN vs. MobileNetV2 and
 EfficientNetB0) so the work can be judged as research, not only as a
@@ -86,9 +91,36 @@ comparable with the original run:
 
 ## Results
 
+### Retraining run — 7 Nov 2026 (Google Colab, T4 GPU)
+
+The model was retrained with the reproducible script in this repo
+(`python src/train.py --data-dir data --epochs 10 --batch-size 32`),
+with data augmentation (random flip / rotation / zoom) on the training
+set only. Full per-epoch history in `results/training_history.json`,
+per-class metrics in `results/evaluation.json` and
+`results/classification_report.txt` (17,572 validation images).
+
+| Metric | Epoch 1 | Final (epoch 10) |
+|---|---|---|
+| Training accuracy | 36.77% | **94.86%** |
+| Validation accuracy | 66.29% | **93.08%** |
+| Training loss | 2.193 | 0.153 |
+| Validation loss | 1.095 | 0.203 |
+
+Validation accuracy peaked at **94.27% (epoch 8)**; macro-average F1
+**0.9308**, weighted-average F1 **0.9307**. The trained model
+(`trained_plant_disease_model.keras`, 87 MB) is kept off GitHub (see
+`.gitignore`) — download it from the Drive link in Reproducibility or
+retrain with the Colab notebook.
+
+![Training vs. validation accuracy](results/figures/accuracy.png)
+![Training vs. validation loss](results/figures/loss.png)
+
+### Original run (for comparison)
+
 These are the **verified numbers from the original run**
-(`results/training_history.json`, 10 epochs). No other accuracy figure
-is claimed anywhere in this project.
+(`results/training_history_original.json`, 10 epochs, no augmentation).
+No other accuracy figure is claimed anywhere in this project.
 
 | Metric | Epoch 1 | Final (epoch 10) |
 |---|---|---|
@@ -97,14 +129,14 @@ is claimed anywhere in this project.
 | Training loss | 1.293 | 0.057 |
 | Validation loss | 0.523 | 0.138 |
 
-![Training vs. validation accuracy](results/figures/accuracy.png)
-![Training vs. validation loss](results/figures/loss.png)
-
-Per-class precision/recall/F1 and a held-out test-set evaluation are
-**pending retraining** — the original zip contains no trained model
-file (see Known limitations), so the classification report in
-`results/` will be produced by `src/train.py` on the retraining run.
-Do not quote test-set numbers until that run exists.
+The retrained run scores lower than the original run, which is
+expected: augmentation makes training harder (the model sees a
+different augmented image every epoch), so training accuracy rises
+more slowly — but the retrained numbers are the reproducible ones,
+measured end-to-end by `src/train.py` on the same validation set,
+with the trained model file actually saved. Do not quote test-set
+numbers: the original zip's `test/` folder holds only 33 sample
+images, not a proper held-out test set.
 
 ## Reproducibility
 
@@ -154,16 +186,28 @@ file is present, the app explains how to get one instead of crashing.
    notebook saved the model as `trained_model.keras` (name mismatch).
    Fixed in this version: `src/train.py` saves with the correct name,
    and `main.py` loads the model once (cached) and falls back to
-   `trained_model.keras` if the preferred name is absent — but until a
-   model is retrained, predictions cannot run.
+   `trained_model.keras` if the preferred name is absent. The model
+   was retrained on 7 Nov 2026 (see Results) — place
+   `trained_plant_disease_model.keras` next to `main.py` to run
+   predictions; until then the app explains how to get one instead of
+   crashing. The 87 MB model file is not stored in this repo
+   (`.gitignore`); get it from Drive or retrain with the Colab
+   notebook.
 2. **Test set is only 33 images.** The original zip's `test/` folder
    is a small sample set, not a proper held-out test set. Test-set
    numbers must come from a proper split in the retraining run; the
    validation set was also (incorrectly) used as the test set in the
    old Test notebook.
 3. **No data augmentation in the original run.** Added in `src/train.py`.
-4. **No per-class metrics were recorded originally.** Added via
-   `src/evaluate.py`; results pending retraining.
+4. **Per-class metrics recorded on retraining.** `src/evaluate.py`
+   produces them; `results/evaluation.json` and
+   `results/classification_report.txt` now hold the 7 Nov 2026
+   retraining run (macro-average F1 0.9308, 17,572 validation images).
+   Note: two dataset folder names differ slightly from the names in
+   `src/model.py` (`Tomato___Spider_mites Two-spotted_spider_mite`
+   uses a space; one Corn folder name also differs) — `src/train.py`
+   is unaffected (TensorFlow sorts folders, indices align) and
+   `src/evaluate.py` now tolerates such spelling variants.
 5. **Single train/validation split, no cross-validation.** Noted as future work.
 
 ## Future work

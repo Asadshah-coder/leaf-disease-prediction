@@ -90,6 +90,16 @@ def make_gradcam_heatmap(model, image_array, class_index):
     import numpy as np
     import tensorflow as tf
 
+    # A model loaded from disk may not expose ``.output`` / layer
+    # ``.output`` until it has been called once (Keras 3 raises
+    # "The layer ... has never been called" otherwise). Run one dummy
+    # forward pass first so the graph — and every layer's outputs —
+    # is defined before building the gradient model.
+    if not getattr(model, "built", False):
+        model.build((None, IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
+    _ = model(tf.zeros((1, IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
+                       dtype=tf.float32), training=False)
+
     conv_name = last_conv_layer(model)
     grad_model = tf.keras.models.Model(
         inputs=model.inputs,
