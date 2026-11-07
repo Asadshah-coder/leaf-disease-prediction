@@ -128,6 +128,7 @@ def overlay_heatmap(original_image, heatmap, alpha=0.4):
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib import cm as mpl_cm
+    from PIL import Image
 
     heatmap_resized = np.array(
         Image.fromarray((heatmap * 255).astype("uint8")).resize(
