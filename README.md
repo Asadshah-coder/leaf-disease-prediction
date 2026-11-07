@@ -213,11 +213,11 @@ file is present, the app explains how to get one instead of crashing.
    is unaffected (TensorFlow sorts folders, indices align) and
    `src/evaluate.py` now tolerates such spelling variants.
 5. **Single train/validation split, no cross-validation.** Noted as future work.
-6. **Grad-CAM does not yet run on the saved model.** `src/gradcam.py`
-   fails with `AttributeError: The layer sequential_1 has never been
-   called and thus has no defined output` on Keras 3 when the model is
-   loaded from disk; the dummy-forward-pass fix did not resolve it, and
-   no `results/gradcam.png` exists yet. Fixing it is the next step.
+6. **Grad-CAM fixed 7 Nov 2026.** It failed twice on Keras 3
+   (`AttributeError: ... has never been called`, then a `KeyError`
+   in `Functional.call()`), and now works via a pure eager
+   layer-by-layer forward pass inside `GradientTape`
+   (`results/gradcam.png`, verified on the retrained model).
 
 ## Future work
 
