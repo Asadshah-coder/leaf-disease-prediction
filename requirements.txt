@@ -18,3 +18,5 @@ Pillow>=10.0
 matplotlib>=3.8
 scikit-learn>=1.4
 gdown>=4.7  # downloads the trained model from Google Drive on first run
+requests>=2.31  # local weather (Open-Meteo, free, no key) on the Diagnose page
+streamlit-js-eval>=0.0.1  # optional browser geolocation; app works without it

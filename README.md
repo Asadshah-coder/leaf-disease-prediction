@@ -172,6 +172,27 @@ python src/evaluate.py --model trained_plant_disease_model.keras --data-dir data
 python src/gradcam.py --model trained_plant_disease_model.keras --image path/to/leaf.jpg --output results/gradcam.png
 ```
 
+## Live demo
+
+**https://leaf-disease-prediction-app.streamlit.app/** (Streamlit
+Community Cloud, free tier). The app downloads the trained model from
+Google Drive on first run (see the model note under Results).
+
+The app has five sections (sidebar navigation):
+
+- **Diagnose** — upload up to 3 leaf photos (or take one with the
+  camera), add the farm/city location (manual or browser detection),
+  and get the top-3 predictions with confidence bars, disease
+  information and local weather (Open-Meteo).
+- **Dashboard** — session statistics, diagnoses by disease and by day,
+  and the model's verified performance.
+- **History & Calendar** — every diagnosis saved with date, time and
+  location; browse past diagnoses on a month calendar, read the
+  seasonal disease guide, and export history as CSV.
+- **Disease Library** — all 38 classes with symptoms and general
+  management advice (searchable).
+- **About** — the project, the model and its verified results.
+
 ## How to run the app
 
 ```bash
@@ -179,10 +200,13 @@ pip install -r requirements.txt
 streamlit run main.py
 ```
 
-Then upload up to 3 leaf images in the Disease Recognition section and
-press Predict. A prediction is shown only when the model's top
-confidence is **≥ 80%** (kept from the original project). If no model
-file is present, the app explains how to get one instead of crashing.
+Then upload up to 3 leaf images on the Diagnose page and press
+Diagnose. The top 3 predictions are shown with confidence bars; a
+prediction below **80%** confidence is marked uncertain (kept from the
+original project's 80% rule, which used to hide such rows entirely).
+If no model file is present, the app explains how to get one instead
+of crashing. History is kept for the session only — a database is
+needed for permanent history.
 
 ## Known limitations
 
