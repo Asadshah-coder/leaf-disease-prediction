@@ -133,11 +133,19 @@ def predict_image(model, image_file):
     """Predict the disease class of one uploaded leaf image.
 
     Returns (predicted_class, confidence) where confidence is 0..1.
+
+    The model was trained on pixel values normalised to [0, 1]
+    (``train.py`` applies ``Rescaling(1.0 / 255)`` in the data
+    pipeline, and the layer is NOT part of the saved model), so the
+    image must be divided by 255 here. Feeding raw [0, 255] pixels
+    saturates the network and it predicts the same class at ~100%
+    for every image — this was the bug found on 7 Nov 2026 when the
+    live demo predicted Tomato mosaic virus for all 6 test photos.
     """
     image = tf.keras.preprocessing.image.load_img(
         image_file, target_size=IMAGE_SIZE
     )
-    input_arr = tf.keras.preprocessing.image.img_to_array(image)
+    input_arr = tf.keras.preprocessing.image.img_to_array(image) / 255.0
     input_arr = np.array([input_arr])  # single image -> batch of one
     predictions = model.predict(input_arr, verbose=0)
     index = int(np.argmax(predictions))
