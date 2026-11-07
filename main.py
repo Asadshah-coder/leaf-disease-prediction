@@ -414,6 +414,7 @@ def page_diagnose(model) -> None:
                    "leaf-vs-non-leaf classifier is training (experiment E4).")
 
     if st.button("🔍 Diagnose", type="primary"):
+        saved = 0
         for image in images:
             filename = getattr(image, "name", "camera photo")
             # Validate BEFORE the disease model ever sees the image:
@@ -447,6 +448,7 @@ def page_diagnose(model) -> None:
                 "lon": float(lon) if lon is not None else None,
             }
             add_diagnosis(record)
+            saved += 1
 
             img_col, res_col = st.columns([1, 2])
             with img_col:
@@ -489,7 +491,8 @@ def page_diagnose(model) -> None:
                         st.markdown(f"**Symptoms:** {info['symptoms']}")
                         st.markdown(f"**What to do:** {info['management']}")
                         st.markdown(f"**Prevention:** {info['prevention']}")
-        st.success("Diagnosis saved to History & Calendar.")
+        if saved:
+            st.success("Diagnosis saved to History & Calendar.")
 
         points = [
             {"lat": r["lat"], "lon": r["lon"]}
