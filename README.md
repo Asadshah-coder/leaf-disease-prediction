@@ -281,3 +281,5 @@ needed for permanent history.
     ├── COLAB_TRAINING.md       # Step-by-step Colab retraining guide
     └── research-summary.md     # Short research summary for applications
 ```
+
+Portfolio: https://asadbukhari.site
