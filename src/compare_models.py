@@ -24,8 +24,21 @@ Usage::
     python src/compare_models.py --data-dir data --epochs 5 \\
         --batch-size 32 --results-dir results
 
+    # Re-run one model only, with its own output file:
+    python src/compare_models.py --models efficientnetb0 \\
+        --output model_comparison_efficientnetb0_rerun.csv
+
 Output: ``results/model_comparison.csv`` with one row per model:
 model, val_accuracy, val_loss, epochs, trainable_params.
+
+Preprocessing (fixed after the first E3 run, 8 Nov 2026): the custom
+CNN is trained on [0, 1] inputs (its native pipeline), but each
+pretrained base gets its own ``preprocess_input`` ([0, 255] -> [-1, 1])
+— feeding a frozen ImageNet base plain [0, 1] inputs left
+EfficientNetB0 at random chance (val accuracy 0.0273, loss ln 38).
+A feature diagnostic runs before each transfer model trains: if the
+pooled base features are (near-)constant, the run aborts that model
+instead of wasting 5 epochs on a head that cannot learn.
 """
 
 import argparse
@@ -71,12 +84,29 @@ def parse_args():
         "--seed", type=int, default=42,
         help="Random seed for reproducibility (default: 42)",
     )
+    parser.add_argument(
+        "--models", type=str, default="custom,mobilenetv2,efficientnetb0",
+        help="Comma-separated models to train: custom, mobilenetv2, "
+             "efficientnetb0 (default: all three)",
+    )
+    parser.add_argument(
+        "--output", type=str, default="model_comparison.csv",
+        help="Output CSV filename inside --results-dir "
+             "(default: model_comparison.csv)",
+    )
     return parser.parse_args()
 
 
-def make_datasets(data_dir, batch_size, seed, augment=True):
-    """Same pipeline as src/train.py: 128x128, normalised, augmentation
-    on the training set only."""
+def make_datasets(data_dir, batch_size, seed, augment=True,
+                  preprocess_fn=None):
+    """Same pipeline as src/train.py: 128x128, augmentation on the
+    training set only.
+
+    ``preprocess_fn`` (e.g. a base's ``preprocess_input``) replaces
+    the plain [0, 1] rescaling: images are cast to float32, augmented
+    on the [0, 255] scale, then passed through ``preprocess_fn``.
+    When None, the original [0, 1] rescaling is used (custom CNN).
+    """
     import tensorflow as tf
 
     train_ds = tf.keras.utils.image_dataset_from_directory(
@@ -95,34 +125,72 @@ def make_datasets(data_dir, batch_size, seed, augment=True):
         tf.keras.layers.RandomRotation(0.1),
         tf.keras.layers.RandomZoom(0.1),
     ])
-    normalise = tf.keras.layers.Rescaling(1.0 / 255)
-    if augment:
-        train_ds = train_ds.map(
-            lambda x, y: (augmentation(normalise(x), training=True), y),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
-    else:
-        train_ds = train_ds.map(
-            lambda x, y: (normalise(x), y),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
+
+    def prepare(images, training):
+        images = tf.cast(images, tf.float32)
+        if training and augment:
+            images = augmentation(images, training=True)
+        if preprocess_fn is not None:
+            return preprocess_fn(images)
+        return images / 255.0
+
+    train_ds = train_ds.map(
+        lambda x, y: (prepare(x, True), y),
+        num_parallel_calls=tf.data.AUTOTUNE,
+    )
     valid_ds = valid_ds.map(
-        lambda x, y: (normalise(x), y),
+        lambda x, y: (prepare(x, False), y),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
     return (train_ds.prefetch(tf.data.AUTOTUNE),
             valid_ds.prefetch(tf.data.AUTOTUNE))
 
 
+def transfer_preprocess_fn(base_name):
+    """The ImageNet ``preprocess_input`` for a transfer base."""
+    import tensorflow as tf
+
+    if base_name == "MobileNetV2":
+        return tf.keras.applications.mobilenet_v2.preprocess_input
+    if base_name == "EfficientNetB0":
+        return tf.keras.applications.efficientnet.preprocess_input
+    raise ValueError(f"Unknown base model: {base_name}")
+
+
+def diagnose_base_features(model, valid_ds):
+    """Print pooled-feature stats for one validation batch.
+
+    Returns the feature std. A std near zero means the frozen base
+    outputs (near-)constant features and the head cannot learn —
+    the caller should abort that model instead of training it.
+    """
+    import numpy as np
+    import tensorflow as tf
+
+    base = next(
+        layer for layer in model.layers
+        if isinstance(layer, tf.keras.Model)
+    )
+    feats = tf.keras.Model(
+        model.input,
+        tf.keras.layers.GlobalAveragePooling2D()(base.output),
+    )
+    images, _ = next(iter(valid_ds))
+    out = feats.predict(images, verbose=0)
+    std = float(np.std(out))
+    print(f"Base features: shape {out.shape}, mean {out.mean():.4f}, "
+          f"std {std:.4f}, min {out.min():.4f}, max {out.max():.4f}")
+    return std
+
+
 def build_transfer_model(base_name, input_shape=(128, 128, 3),
                          num_classes=len(CLASS_NAMES)):
     """Pretrained base (frozen) + a new 38-class classification head.
 
-    The base expects ImageNet-style preprocessing; the datasets here
-    are already rescaled to [0, 1], which is acceptable for a first
-    comparison and is documented in the comparison CSV notes. For a
-    final, publication-grade run, use each base's own
-    ``preprocess_input`` instead of plain rescaling.
+    The caller must feed this model inputs preprocessed with the
+    base's own ``preprocess_input`` (see ``transfer_preprocess_fn``):
+    feeding plain [0, 1] inputs left EfficientNetB0 at random chance
+    in the first E3 run (8 Nov 2026).
     """
     import tensorflow as tf
 
@@ -181,30 +249,46 @@ def main():
     tf.random.set_seed(args.seed)
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
-
-    train_ds, valid_ds = make_datasets(
-        args.data_dir, args.batch_size, args.seed
-    )
+    wanted = {m.strip().lower() for m in args.models.split(",")}
 
     rows = []
-    # (a) Custom CNN, trained from scratch.
-    custom = compile_model(build_custom_cnn(),
-                           learning_rate=args.learning_rate)
-    rows.append(run_one("custom_cnn", custom, train_ds, valid_ds,
-                        args.epochs, args.learning_rate))
+    if "custom" in wanted:
+        train_ds, valid_ds = make_datasets(
+            args.data_dir, args.batch_size, args.seed
+        )
+        # (a) Custom CNN, trained from scratch.
+        custom = compile_model(build_custom_cnn(),
+                               learning_rate=args.learning_rate)
+        rows.append(run_one("custom_cnn", custom, train_ds, valid_ds,
+                            args.epochs, args.learning_rate))
 
-    # (b) MobileNetV2 pretrained baseline.
-    mobilenet = build_transfer_model("MobileNetV2")
-    rows.append(run_one("mobilenetv2_imagenet", mobilenet, train_ds,
-                        valid_ds, args.epochs, args.learning_rate))
+    for base_name, row_name in (
+        ("MobileNetV2", "mobilenetv2_imagenet"),
+        ("EfficientNetB0", "efficientnetb0_imagenet"),
+    ):
+        if base_name.lower() not in wanted:
+            continue
+        # Each transfer base gets its own preprocess_input ([0, 255]
+        # -> [-1, 1]); plain [0, 1] inputs broke EfficientNetB0 in
+        # the first E3 run.
+        train_ds, valid_ds = make_datasets(
+            args.data_dir, args.batch_size, args.seed,
+            preprocess_fn=transfer_preprocess_fn(base_name),
+        )
+        model = build_transfer_model(base_name)
+        feat_std = diagnose_base_features(model, valid_ds)
+        if feat_std < 1e-6:
+            print(f"ABORT {row_name}: pooled base features are "
+                  f"(near-)constant (std {feat_std:.2e}) — the head "
+                  f"cannot learn. Not trained, no row written.")
+            continue
+        rows.append(run_one(row_name, model, train_ds, valid_ds,
+                            args.epochs, args.learning_rate))
 
-    # (c) EfficientNetB0 pretrained baseline.
-    efficientnet = build_transfer_model("EfficientNetB0")
-    rows.append(run_one("efficientnetb0_imagenet", efficientnet,
-                        train_ds, valid_ds, args.epochs,
-                        args.learning_rate))
-
-    out_path = results_dir / "model_comparison.csv"
+    if not rows:
+        print("No models trained — nothing written.")
+        return
+    out_path = results_dir / args.output
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(
             f, fieldnames=["model", "val_accuracy", "val_loss",
