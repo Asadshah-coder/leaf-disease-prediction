@@ -381,6 +381,15 @@ Report per-set accuracy for every model version. This is the number
 that belongs in the paper next to the 94.21% validation figure, with
 the gap discussed explicitly.
 
+**Status (8 Nov 2026): Batch 1 done (E6 log).** 3 houseplant photos
+(fiddle-leaf fig, monstera, philodendron — all outside the 38
+classes, so no accuracy number): gate rejected 2/3 real leaves (7.5%,
+38.1% — busy backgrounds; lab-measured recall 99.74% does not hold
+on real-world photos), and the philodendron was confidently labelled
+"Potato — Healthy" 85.1% with no warning — gate + energy catch
+non-leaf images, not unseen leaf species. Crop photos with known
+labels still needed for a scored RW-Field accuracy.
+
 ### Phase 5 — Paper documentation
 
 - Experiment log for E1–E5 in the format of §7, kept in
