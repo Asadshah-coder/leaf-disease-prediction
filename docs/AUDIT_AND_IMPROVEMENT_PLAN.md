@@ -356,9 +356,15 @@ Wired into `main.py` (calibrated top-3 + energy uncertainty rule,
   split so the comparison with E1 is fair.
 - **E3 — Transfer learning:** MobileNetV2 vs EfficientNetB0
   (ImageNet-pretrained, frozen base + new 38-class head), same
-  pipeline, 5 epochs each. This is the comparison Colab's GPU limit
-  blocked on 7 Nov (runtime cut at epoch 3/5). Retry after the free
-  GPU quota resets, or with Colab Pay As You Go (user's decision).
+  pipeline, 5 epochs each. **Status (8 Nov 2026): COMPLETE, 5-epoch
+  run on Colab T4** — custom CNN **0.9239**, MobileNetV2 0.8884,
+  EfficientNetB0 **0.0273 = failed run** (random chance, loss ≈
+  ln 38; likely preprocessing mismatch + frozen BatchNorm, not a
+  real architecture result — must NOT be quoted as EfficientNet's
+  accuracy; needs a focused re-run with per-base preprocess_input).
+  The custom CNN beats the valid baseline; the comparison is
+  two-model + one documented failure until EfficientNet is re-run.
+  Full log: `docs/experiments/E3.md`.
 - **Winner rule:** a new model replaces the baseline only if it beats
   it on validation accuracy *and* macro F1 *and* the real-world set
   (E4), with the comparison published in the experiment log.

@@ -1,0 +1,4 @@
+model,val_accuracy,val_loss,epochs,trainable_params
+custom_cnn,0.9239,0.2296,5,7510890
+mobilenetv2_imagenet,0.8884,0.371,5,48678
+efficientnetb0_imagenet,0.0273,3.6387,5,48678
